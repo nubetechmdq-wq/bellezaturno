@@ -8,11 +8,12 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = createAdminClient();
     const body = await req.json();
     console.log("[Webhook Received]", JSON.stringify(body, null, 2));
 
-    // Verificamos que sea un mensaje de usuario real. Evolution v2 usa MESSAGES_UPSERT
     const event = body.event || body.type || body.event_type;
+    const instanceName = body.instance || body.instanceName || body.instance_name;
     if (event !== "MESSAGES_UPSERT" && event !== "messages.upsert") {
       return NextResponse.json({ ok: true, ignored: true, event });
     }
@@ -23,7 +24,6 @@ export async function POST(req: NextRequest) {
     const key = data.key || data.messages?.[0]?.key;
     const remoteJid = key?.remoteJid;
     const fromMe = key?.fromMe;
-    const instanceName = body.instance || body.instanceName || body.instance_name;
 
     if (fromMe) return NextResponse.json({ ok: true, message: "Ignored: From Me" });
     if (!remoteJid || !messageData) return NextResponse.json({ ok: true, message: "Missing data", hasJid: !!remoteJid, hasMsg: !!messageData });
@@ -44,8 +44,6 @@ export async function POST(req: NextRequest) {
 
     if (!textMsg.trim()) return NextResponse.json({ ok: true });
 
-    const admin = createAdminClient();
-
     // 1. Identificar el Tenant vía instanceName
     const { data: config } = await admin
       .from("whatsapp_config")
@@ -53,6 +51,15 @@ export async function POST(req: NextRequest) {
       .eq("evolution_instance_name", instanceName)
       .eq("is_active", true)
       .single();
+
+    if (config) {
+      // Log de recepción exitosa
+      await admin.from("analytics_events").insert({
+        tenant_id: config.tenant_id,
+        event_type: "webhook_hit",
+        properties: { instance: instanceName, remoteJid }
+      });
+    }
 
     if (!config || !config.tenants) {
       console.log(`No se encontró config activa para la instancia: ${instanceName}`);
