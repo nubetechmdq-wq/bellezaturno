@@ -1,0 +1,153 @@
+import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
+import { createAdminClient } from "@/lib/supabase/server";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    // Verificamos que sea un mensaje de usuario real (no de mí mismo, no es un update de estado, etc)
+    if (body.event !== "messages.upsert") return NextResponse.json({ ok: true });
+
+    const messageData = body.data?.message;
+    const remoteJid = body.data?.key?.remoteJid;
+    const fromMe = body.data?.key?.fromMe;
+    const instanceName = body.instance;
+    const clientName = body.data?.pushName || "Cliente";
+
+    if (!messageData || fromMe || !remoteJid || remoteJid.includes("@g.us")) {
+      return NextResponse.json({ ok: true }); // Ignorar
+    }
+
+    // Extraer texto (puede venir en diferentes propiedades según Evolution Mappings)
+    const textMsg =
+      messageData.conversation ||
+      messageData.extendedTextMessage?.text ||
+      messageData.text ||
+      "";
+
+    if (!textMsg.trim()) return NextResponse.json({ ok: true });
+
+    const admin = createAdminClient();
+
+    // 1. Identificar el Tenant vía instanceName
+    const { data: config } = await admin
+      .from("whatsapp_config")
+      .select("*, tenants(*, services(name, description, duration_minutes, price))")
+      .eq("evolution_instance_name", instanceName)
+      .eq("is_active", true)
+      .single();
+
+    if (!config || !config.tenants) {
+      console.log(`No se encontró config activa para la instancia: ${instanceName}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    const tenant = config.tenants as any;
+    const landingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/s/${tenant.slug}`;
+
+    // 2. Obtener o crear conversación (contexto)
+    const { data: conv, error: convError } = await admin
+      .from("whatsapp_conversations")
+      .select("*")
+      .eq("tenant_id", config.tenant_id)
+      .eq("client_phone", remoteJid)
+      .single();
+
+    let conversationContext = [];
+    if (!conv) {
+      await admin.from("whatsapp_conversations").insert({
+        tenant_id: config.tenant_id,
+        client_phone: remoteJid,
+        client_name: clientName,
+        message_count: 1,
+        last_message: textMsg,
+        context: { history: [] }
+      });
+    } else {
+      conversationContext = (conv.context as any)?.history || [];
+      await admin.from("whatsapp_conversations").update({
+        message_count: conv.message_count + 1,
+        last_message: textMsg,
+      }).eq("id", conv.id);
+    }
+
+    // 3. Preparar el Prompt del Asistente (Sistema)
+    const systemPrompt = `Eres el asistente virtual amable y profesional de "${tenant.name}" (${tenant.type}), un negocio ubicado en ${tenant.city}.
+Tu trabajo es responder preguntas sobre el salón, los servicios, precios y horarios.
+
+REGLAS DE PERSONALIDAD (IMPORTANTE):
+${config.ai_instructions || "Sé amable y servicial."}
+
+IMPORTANTE SOBRE RESERVAS:
+- Tú NO debes agendar turnos explícitamente conversando con el cliente ya que no tienes acceso en tiempo real al calendario para bloquear espacios.
+- Si el cliente quiere reservar, solicitar un turno o ver disponibilidad, SIEMPRE dale una respuesta breve y proporcionale ESTE ENLACE OBLIGATORIO para que el mismo acceda a la agenda online 24/7: ${landingUrl}
+- Nunca intentes adivinar horarios libres ni registrar el turno por ti mismo.
+
+DATOS DEL SALÓN:
+- Dirección: ${tenant.address || "Consultar"}
+- Horarios: El negocio cuenta con disponibilidad configurada. (Derivar al link para ver slots libres de hoy o mañana).
+- Servicios Ofrecidos:
+${tenant.services.map((s: any) => `  * ${s.name} - $${s.price} (${s.duration_minutes} min)`).join("\n")}
+
+INSTRUCCIONES FINALES:
+- Habla en español de Argentina (voseo: decí "podés", "tenés", "entrá").
+- Sé breve y conciso, máximo 3 o 4 renglones por mensaje de WhatsApp.
+- Evita párrafos largos, usa emojis sutiles.
+`;
+
+    // 4. Llamar a Gemini (2.5 Flash Lite para más velocidad)
+    const history = conversationContext.slice(-4).map((h: any) => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.content }]
+    }));
+
+    const chatSession = await ai.chats.create({
+      model: "gemini-2.5-flash-lite",
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.3,
+      },
+      history
+    });
+
+    // Enviar el mensaje actual
+    const response = await chatSession.sendMessage({ message: textMsg });
+    const replyText = response.text;
+
+    // Actualizar historial en BD
+    const newHistory = [
+      ...conversationContext,
+      { role: "user", content: textMsg },
+      { role: "assistant", content: replyText }
+    ].slice(-10); // guardar últimos 10
+    
+    await admin.from("whatsapp_conversations").update({
+      context: { history: newHistory }
+    }).eq("tenant_id", config.tenant_id).eq("client_phone", remoteJid);
+
+    // 5. Enviar mensaje de vuelta vía Evolution API
+    if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+      await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": EVOLUTION_API_KEY
+        },
+        body: JSON.stringify({
+          number: remoteJid,
+          text: replyText
+        })
+      });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    console.error(`[Webhook] Error:`, error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
