@@ -75,9 +75,12 @@ export async function POST() {
       },
       body: JSON.stringify({
         instanceName,
-        token: tenant.slug, // Un token simple basado en el slug
+        token: tenant.slug, 
         qrcode: true,
-        integration: "WHATSAPP-BAILEYS"
+        integration: "WHATSAPP-BAILEYS",
+        webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhook/whatsapp`,
+        webhook_by_events: false,
+        events: ["MESSAGES_UPSERT"]
       })
     });
 
@@ -95,26 +98,25 @@ export async function POST() {
       console.log("[Evolution Connect fallback]", connectData);
     }
 
-    // 4. Configurar el Webhook para recibir mensajes. Usamos NEXT_PUBLIC_APP_URL
+    // 4. Configurar el Webhook para recibir mensajes (Refuerzo v2)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (appUrl) {
       const webhookUrl = `${appUrl}/api/webhook/whatsapp`;
-      await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
+      console.log(`[Webhook] Configuring for ${instanceName} pointing to ${webhookUrl}`);
+      
+      const webhookRes = await fetch(`${EVOLUTION_URL}/webhook/instance/${instanceName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "apikey": EVOLUTION_KEY || ""
         },
         body: JSON.stringify({
-          webhook: {
-            url: webhookUrl,
-            byEvents: false,
-            base64: false,
-            events: ["MESSAGES_UPSERT"]
-          }
+          url: webhookUrl,
+          enabled: true,
+          events: ["MESSAGES_UPSERT"]
         })
       });
-      console.log(`[Webhook] Configure for ${instanceName} pointing to ${webhookUrl}`);
+      console.log(`[Webhook Response]`, webhookRes.status, await webhookRes.text());
     }
 
     await supabase
