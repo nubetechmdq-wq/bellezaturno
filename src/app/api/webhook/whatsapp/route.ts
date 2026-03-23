@@ -12,26 +12,34 @@ export async function POST(req: NextRequest) {
     console.log("[Webhook Received]", JSON.stringify(body, null, 2));
 
     // Verificamos que sea un mensaje de usuario real. Evolution v2 usa MESSAGES_UPSERT
-    const event = body.event || body.type;
+    const event = body.event || body.type || body.event_type;
     if (event !== "MESSAGES_UPSERT" && event !== "messages.upsert") {
       return NextResponse.json({ ok: true, ignored: true, event });
     }
 
-    const messageData = body.data?.message;
-    const remoteJid = body.data?.key?.remoteJid;
-    const fromMe = body.data?.key?.fromMe;
-    const instanceName = body.instance;
-    const clientName = body.data?.pushName || "Cliente";
+    // Extraemos los datos principales de forma flexible (v1 vs v2)
+    const data = body.data || body;
+    const messageData = data.message || data.messages?.[0]?.message || data.messages?.[0];
+    const key = data.key || data.messages?.[0]?.key;
+    const remoteJid = key?.remoteJid;
+    const fromMe = key?.fromMe;
+    const instanceName = body.instance || body.instanceName || body.instance_name;
 
-    if (!messageData || fromMe || !remoteJid || remoteJid.includes("@g.us")) {
-      return NextResponse.json({ ok: true }); // Ignorar
-    }
+    if (fromMe) return NextResponse.json({ ok: true, message: "Ignored: From Me" });
+    if (!remoteJid || !messageData) return NextResponse.json({ ok: true, message: "Missing data", hasJid: !!remoteJid, hasMsg: !!messageData });
+    if (remoteJid.includes("@g.us")) return NextResponse.json({ ok: true, message: "Ignored: Group chat" });
+
+    const clientName = data.pushName || data.messages?.[0]?.pushName || "Cliente";
+
+    console.log(`[Webhook] Processing message from ${remoteJid} (${clientName}) for instance ${instanceName}`);
 
     // Extraer texto (puede venir en diferentes propiedades según Evolution Mappings)
     const textMsg =
       messageData.conversation ||
       messageData.extendedTextMessage?.text ||
       messageData.text ||
+      messageData.caption ||
+      messageData.message?.conversation ||
       "";
 
     if (!textMsg.trim()) return NextResponse.json({ ok: true });
