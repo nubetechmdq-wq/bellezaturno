@@ -104,39 +104,51 @@ INSTRUCCIONES FINALES:
 - Evita párrafos largos, usa emojis sutiles.
 `;
 
-    // 4. Llamar a Gemini (2.5 Flash Lite para más velocidad)
-    const history = conversationContext.slice(-4).map((h: any) => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.content }]
-    }));
+    // 4. Llamar a Gemini
+    let replyText = "";
+    try {
+      if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "tu_gemini_api_key") {
+        throw new Error("GEMINI_API_KEY no configurada correctamente en Vercel.");
+      }
 
-    const chatSession = await ai.chats.create({
-      model: "gemini-2.5-flash-lite",
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.3,
-      },
-      history
-    });
+      const history = conversationContext.slice(-4).map((h: any) => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.content }]
+      }));
 
-    // Enviar el mensaje actual
-    const response = await chatSession.sendMessage({ message: textMsg });
-    const replyText = response.text;
+      // Usamos la sintaxis original esperada por la librería instalada
+      // @ts-ignore
+      const chatSession = await ai.chats.create({
+        model: "gemini-1.5-flash", 
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.3,
+        },
+        history
+      });
 
-    // Actualizar historial en BD
-    const newHistory = [
-      ...conversationContext,
-      { role: "user", content: textMsg },
-      { role: "assistant", content: replyText }
-    ].slice(-10); // guardar últimos 10
-    
-    await admin.from("whatsapp_conversations").update({
-      context: { history: newHistory }
-    }).eq("tenant_id", config.tenant_id).eq("client_phone", remoteJid);
+      const response = await chatSession.sendMessage({ message: textMsg });
+      replyText = response.text;
+
+      // Guardar historial
+      const newHistory = [
+        ...conversationContext,
+        { role: "user", content: textMsg },
+        { role: "assistant", content: replyText }
+      ].slice(-10);
+      
+      await admin.from("whatsapp_conversations").update({
+        context: { history: newHistory }
+      }).eq("tenant_id", config.tenant_id).eq("client_phone", remoteJid);
+
+    } catch (aiError: any) {
+      console.error("[Gemini Error]", aiError);
+      replyText = `Lo siento, estoy teniendo un inconveniente técnico (Error IA). Por favor, reservá directamente acá: ${landingUrl}`;
+    }
 
     // 5. Enviar mensaje de vuelta vía Evolution API
     if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-      await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+      const sendRes = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,6 +159,7 @@ INSTRUCCIONES FINALES:
           text: replyText
         })
       });
+      console.log("[Evolution Send]", sendRes.status, await sendRes.text());
     }
 
     return NextResponse.json({ ok: true });
