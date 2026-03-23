@@ -128,7 +128,7 @@ INSTRUCCIONES FINALES:
       });
 
       const response = await chatSession.sendMessage({ message: textMsg });
-      replyText = response.text;
+      replyText = response.text || "Lo siento, no pude procesar tu mensaje.";
 
       // Guardar historial
       const newHistory = [
