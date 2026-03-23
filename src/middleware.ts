@@ -8,7 +8,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/s/(.*)",             // Landing pages públicas de salones
-  "/api/webhooks/(.*)", // Webhooks de Clerk, Mercado Pago, WhatsApp
+  "/api/webhooks/(.*)", // plural
+  "/api/webhook/(.*)",  // singular (WhatsApp, etc)
   "/api/booking/(.*)",  // Endpoints públicos de reservas
 ]);
 
