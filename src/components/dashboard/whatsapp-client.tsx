@@ -299,7 +299,8 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
                     )}
                     onClick={() => {
                       const newState = !config?.is_active;
-                      console.log("V2 TOGGLE CLICKED:", newState);
+                      console.log("CLIC DETECTADO v2.1:", newState);
+                      alert("Has cambiado el bot a: " + (newState ? "ACTIVADO" : "DESACTIVADO") + ". Ahora dale a GUARDAR CAMBIOS.");
                       setConfig((prev: any) => ({ ...prev, is_active: newState }));
                     }}
                   >
@@ -312,7 +313,11 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
                   </button>
                   <div 
                     className="cursor-pointer" 
-                    onClick={() => setConfig((prev: any) => ({ ...prev, is_active: !prev?.is_active }))}
+                    onClick={() => {
+                      const newState = !config?.is_active;
+                      alert("Clic en el texto: Cambiando a " + (newState ? "ACTIVADO" : "DESACTIVADO"));
+                      setConfig((prev: any) => ({ ...prev, is_active: newState }));
+                    }}
                   >
                     <p className="font-bold text-gray-900 text-sm flex items-center gap-2">
                       Activar Respuestas Automáticas
