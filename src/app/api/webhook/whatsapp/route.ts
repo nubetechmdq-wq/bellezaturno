@@ -9,9 +9,13 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log("[Webhook Received]", JSON.stringify(body, null, 2));
 
-    // Verificamos que sea un mensaje de usuario real (no de mí mismo, no es un update de estado, etc)
-    if (body.event !== "messages.upsert") return NextResponse.json({ ok: true });
+    // Verificamos que sea un mensaje de usuario real. Evolution v2 usa MESSAGES_UPSERT
+    const event = body.event || body.type;
+    if (event !== "MESSAGES_UPSERT" && event !== "messages.upsert") {
+      return NextResponse.json({ ok: true, ignored: true, event });
+    }
 
     const messageData = body.data?.message;
     const remoteJid = body.data?.key?.remoteJid;
