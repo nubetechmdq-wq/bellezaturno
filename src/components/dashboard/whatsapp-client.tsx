@@ -291,19 +291,28 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
               {/* Toggle de Bot Activo */}
               <div className="bg-gray-50 rounded-2xl p-6 flex items-center justify-between border border-gray-100 mt-4">
                 <div className="flex items-center gap-4">
-                  <div 
-                    className={cn("w-14 h-7 rounded-full transition-all duration-300 relative cursor-pointer shadow-inner", {
-                      "bg-emerald-500": config?.is_active,
-                      "bg-gray-300": !config?.is_active,
-                    })}
-                    onClick={() => setConfig({ ...config, is_active: !config.is_active })}
+                  <button 
+                    type="button"
+                    className={cn(
+                      "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-300 focus:outline-none shadow-inner",
+                      config?.is_active ? "bg-emerald-500" : "bg-gray-300"
+                    )}
+                    onClick={() => {
+                      console.log("Toggle clicked! Old state:", config?.is_active);
+                      setConfig((prev: any) => ({ ...prev, is_active: !prev?.is_active }));
+                    }}
                   >
-                    <div className={cn("absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-sm", {
-                      "left-8": config?.is_active,
-                      "left-1": !config?.is_active,
-                    })} />
-                  </div>
-                  <div className="cursor-pointer" onClick={() => setConfig({ ...config, is_active: !config.is_active })}>
+                    <span
+                      className={cn(
+                        "inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-300 shadow-sm",
+                        config?.is_active ? "translate-x-8" : "translate-x-1"
+                      )}
+                    />
+                  </button>
+                  <div 
+                    className="cursor-pointer" 
+                    onClick={() => setConfig((prev: any) => ({ ...prev, is_active: !prev?.is_active }))}
+                  >
                     <p className="font-bold text-gray-900 text-sm">Activar Respuestas Automáticas</p>
                     <p className="text-[11px] text-gray-500">Si lo apagás, el bot no responderá pero los recordatorios seguirán funcionando.</p>
                   </div>
