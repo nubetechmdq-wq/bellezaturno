@@ -62,12 +62,22 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
     try {
       const res = await fetch("/api/whatsapp/instance", { method: "POST" });
       const data = await res.json();
+      
+      console.log("Respuesta de connect:", data);
+      
+      if (!res.ok) {
+        alert(`Error del servidor: ${data.details || data.error || "Desconocido"}`);
+        return;
+      }
+      
       if (data.base64) {
         setQrCode(data.base64);
         setStatus("connecting");
+      } else {
+        alert("No se recibió QR en la respuesta: " + JSON.stringify(data));
       }
-    } catch (e) {
-      alert("Error al conectar");
+    } catch (e: any) {
+      alert(`Error de red al conectar: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -274,22 +284,23 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
               </div>
 
               {/* Toggle de Bot Activo */}
-              <div className="bg-gray-50 rounded-2xl p-6 flex items-center justify-between border border-gray-100">
+              <div className="bg-gray-50 rounded-2xl p-6 flex items-center justify-between border border-gray-100 mt-4">
                 <div className="flex items-center gap-4">
-                  <div className={cn("w-12 h-6 rounded-full transition-colors relative", {
-                    "bg-emerald-500": config?.is_active,
-                    "bg-gray-300": !config?.is_active,
-                  })}
-                  onClick={() => setConfig({ ...config, is_active: !config.is_active })}
+                  <div 
+                    className={cn("w-14 h-7 rounded-full transition-all duration-300 relative cursor-pointer shadow-inner", {
+                      "bg-emerald-500": config?.is_active,
+                      "bg-gray-300": !config?.is_active,
+                    })}
+                    onClick={() => setConfig({ ...config, is_active: !config.is_active })}
                   >
-                    <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", {
-                      "left-7": config?.is_active,
+                    <div className={cn("absolute top-1 w-5 h-5 bg-white rounded-full transition-all duration-300 shadow-sm", {
+                      "left-8": config?.is_active,
                       "left-1": !config?.is_active,
                     })} />
                   </div>
-                  <div>
+                  <div className="cursor-pointer" onClick={() => setConfig({ ...config, is_active: !config.is_active })}>
                     <p className="font-bold text-gray-900 text-sm">Activar Respuestas Automáticas</p>
-                    <p className="text-xs text-gray-500">Si lo apagás, el bot no responderá pero los recordatorios seguirán funcionando.</p>
+                    <p className="text-[11px] text-gray-500">Si lo apagás, el bot no responderá pero los recordatorios seguirán funcionando.</p>
                   </div>
                 </div>
               </div>
