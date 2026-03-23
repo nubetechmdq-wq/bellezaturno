@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+// v2.2 - Forzado dinámico para evitar 404 estático en Vercel
+
 export async function GET() {
   try {
     const admin = createAdminClient();
