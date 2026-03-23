@@ -25,7 +25,12 @@ interface Props {
 }
 
 export function WhatsAppClient({ tenant, initialConfig }: Props) {
-  const [config, setConfig] = useState(initialConfig);
+  const [config, setConfig] = useState(initialConfig || {
+    is_active: false,
+    ai_instructions: "",
+    greeting_message: "¡Hola! 👋 Soy el asistente virtual de {salon_name}. ¿En qué puedo ayudarte?",
+    booking_success_message: "✅ ¡Tu turno está confirmado! Te esperamos el {date} a las {time}."
+  });
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
