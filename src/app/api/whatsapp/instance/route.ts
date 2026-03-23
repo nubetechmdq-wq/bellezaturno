@@ -66,7 +66,7 @@ export async function POST() {
   const instanceName = `bt-${tenant.slug}`;
 
   try {
-    // 1. Crear instancia si no existe
+    // 1. Intentar crear instancia
     const createRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
       method: "POST",
       headers: { 
@@ -77,25 +77,36 @@ export async function POST() {
         instanceName,
         token: tenant.slug, 
         qrcode: true,
-        integration: "WHATSAPP-BAILEYS",
-        webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhook/whatsapp`,
-        webhook_by_events: false,
-        events: ["MESSAGES_UPSERT"]
+        integration: "WHATSAPP-BAILEYS"
       })
     });
 
     const createData = await createRes.json();
-    console.log("[Evolution Create]", createData);
+    console.log("[Evolution Create Response]", createRes.status, createData);
 
-    let connectData = createData?.qrcode;
+    let connectData = null;
 
-    if (!connectData?.base64) {
-      // 3. Obtener el QR (Evolution v2 /connect)
+    if (createRes.status === 201) {
+      // Éxito en creación, buscamos el QR en la respuesta
+      connectData = createData?.qrcode || createData?.instance?.qrcode;
+    } else if (createRes.status === 403 || createRes.status === 401) {
+       return NextResponse.json({ error: "Error de API Key en Evolution API" }, { status: 403 });
+    } else {
+      // Si ya existe (409) o falló de otra forma, intentamos /connect
+      console.log(`[Evolution] Create returned ${createRes.status}, attempting /connect fallback...`);
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
           headers: { "apikey": EVOLUTION_KEY || "" },
       });
       connectData = await connectRes.json();
-      console.log("[Evolution Connect fallback]", connectData);
+      console.log("[Evolution Connect Result]", connectRes.status, connectData);
+    }
+
+    // Si llegamos acá y no tenemos QR base64, hay un problema real
+    if (!connectData?.base64 && !connectData?.qrcode?.base64) {
+      return NextResponse.json({ 
+        error: "No se pudo obtener el QR de Evolution API", 
+        details: connectData 
+      }, { status: 400 });
     }
 
     // 4. Configurar el Webhook para recibir mensajes (Refuerzo v2)
