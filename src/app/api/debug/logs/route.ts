@@ -17,6 +17,12 @@ export async function GET() {
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
+      env_check: {
+        app_url: process.env.NEXT_PUBLIC_APP_URL || "MISSING",
+        evolution_url: process.env.EVOLUTION_API_URL ? "SET" : "MISSING",
+        gemini_key: process.env.GEMINI_API_KEY ? "SET" : "MISSING",
+        webhook_path: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhook/whatsapp`
+      },
       count: events?.length || 0,
       logs: events
     });
