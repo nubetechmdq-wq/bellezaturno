@@ -21,13 +21,13 @@ export async function PATCH(request: Request) {
   // Actualizar configuración
   const { data, error } = await supabase
     .from("whatsapp_config")
-    .update({
+    .upsert({
+      tenant_id: tenant.id,
       greeting_message: body.greeting_message,
       booking_success_message: body.booking_success_message,
       ai_instructions: body.ai_instructions,
       is_active: body.is_active,
-    })
-    .eq("tenant_id", tenant.id)
+    }, { onConflict: "tenant_id" })
     .select()
     .single();
 

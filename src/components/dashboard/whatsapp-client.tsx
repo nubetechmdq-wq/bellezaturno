@@ -294,18 +294,19 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
                   <button 
                     type="button"
                     className={cn(
-                      "relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-300 focus:outline-none shadow-inner",
-                      config?.is_active ? "bg-emerald-500" : "bg-gray-300"
+                      "relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-500 focus:outline-none shadow-md",
+                      config?.is_active ? "bg-emerald-500" : "bg-gray-400"
                     )}
                     onClick={() => {
-                      console.log("Toggle clicked! Old state:", config?.is_active);
-                      setConfig((prev: any) => ({ ...prev, is_active: !prev?.is_active }));
+                      const newState = !config?.is_active;
+                      console.log("V2 TOGGLE CLICKED:", newState);
+                      setConfig((prev: any) => ({ ...prev, is_active: newState }));
                     }}
                   >
                     <span
                       className={cn(
-                        "inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-300 shadow-sm",
-                        config?.is_active ? "translate-x-8" : "translate-x-1"
+                        "inline-block h-6 w-6 transform rounded-full bg-white transition-all duration-500 shadow-sm",
+                        config?.is_active ? "translate-x-9" : "translate-x-1"
                       )}
                     />
                   </button>
@@ -313,7 +314,10 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
                     className="cursor-pointer" 
                     onClick={() => setConfig((prev: any) => ({ ...prev, is_active: !prev?.is_active }))}
                   >
-                    <p className="font-bold text-gray-900 text-sm">Activar Respuestas Automáticas</p>
+                    <p className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                      Activar Respuestas Automáticas
+                      <span className="text-[9px] text-gray-300 font-normal">v2.1</span>
+                    </p>
                     <p className="text-[11px] text-gray-500">Si lo apagás, el bot no responderá pero los recordatorios seguirán funcionando.</p>
                   </div>
                 </div>

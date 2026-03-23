@@ -38,11 +38,11 @@ export async function GET() {
     // Actualizar estado en DB de forma automática
     await supabase
       .from("whatsapp_config")
-      .update({ 
+      .upsert({ 
+        tenant_id: tenant.id,
         evolution_instance_name: instanceName,
         instance_status: data.instance?.state || "disconnected"
-      })
-      .eq("tenant_id", tenant.id);
+      }, { onConflict: "tenant_id" });
 
     return NextResponse.json(data);
   } catch (error) {
@@ -119,11 +119,11 @@ export async function POST() {
 
     await supabase
       .from("whatsapp_config")
-      .update({ 
+      .upsert({ 
+        tenant_id: tenant.id,
         evolution_instance_name: instanceName,
         instance_status: "connecting"
-      })
-      .eq("tenant_id", tenant.id);
+      }, { onConflict: "tenant_id" });
 
     return NextResponse.json(connectData);
   } catch (error: any) {
