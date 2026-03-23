@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/(.*)", // plural
   "/api/webhook/(.*)",  // singular (WhatsApp, etc)
   "/api/booking/(.*)",  // Endpoints públicos de reservas
+  "/api/debug/(.*)",    // Debug temporal
 ]);
 
 // Rutas del dashboard que SÍ requieren auth
