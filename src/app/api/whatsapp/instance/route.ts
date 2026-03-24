@@ -84,24 +84,34 @@ export async function POST() {
     const createData = await createRes.json();
     console.log("[Evolution Create Response]", createRes.status, createData);
 
+    // LOG INICIAL: Resultado de la creación
+    await supabase.from("analytics_events").insert({
+      tenant_id: tenant.id,
+      event_type: "whatsapp_creation_log",
+      properties: { step: "create", status: createRes.status, data: createData }
+    });
+
     let connectData = null;
 
     if (createRes.status === 201) {
-      // Éxito en creación, buscamos el QR en la respuesta
       connectData = createData?.qrcode || createData?.instance?.qrcode;
     } else if (createRes.status === 403 || createRes.status === 401) {
        return NextResponse.json({ error: "Error de API Key en Evolution API" }, { status: 403 });
     } else {
-      // Si ya existe (409) o falló de otra forma, intentamos /connect
       console.log(`[Evolution] Create returned ${createRes.status}, attempting /connect fallback...`);
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
           headers: { "apikey": EVOLUTION_KEY || "" },
       });
       connectData = await connectRes.json();
-      console.log("[Evolution Connect Result]", connectRes.status, connectData);
+      
+      // LOG: Resultado del connect fallback
+      await supabase.from("analytics_events").insert({
+        tenant_id: tenant.id,
+        event_type: "whatsapp_creation_log",
+        properties: { step: "connect_fallback", status: connectRes.status, data: connectData }
+      });
     }
 
-    // Si llegamos acá y no tenemos QR base64, hay un problema real
     if (!connectData?.base64 && !connectData?.qrcode?.base64) {
       return NextResponse.json({ 
         error: "No se pudo obtener el QR de Evolution API", 
@@ -113,8 +123,6 @@ export async function POST() {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (appUrl) {
       const webhookUrl = `${appUrl}/api/webhook/whatsapp`;
-      console.log(`[Webhook] Configuring for ${instanceName} pointing to ${webhookUrl}`);
-      
       const webhookRes = await fetch(`${EVOLUTION_URL}/webhook/instance/${instanceName}`, {
         method: "POST",
         headers: {
@@ -130,18 +138,12 @@ export async function POST() {
       });
 
       const webhookData = await webhookRes.json();
-      console.log(`[Webhook Response]`, webhookRes.status, webhookData);
 
-      // LOG DE DIAGNÓSTICO EN DB - Muy importante para depuración remota
+      // LOG: Resultado del registro del webhook
       await supabase.from("analytics_events").insert({
         tenant_id: tenant.id,
-        event_type: "webhook_registration_attempt",
-        properties: {
-          status: webhookRes.status,
-          response: webhookData,
-          url_used: webhookUrl,
-          instance: instanceName
-        }
+        event_type: "whatsapp_creation_log",
+        properties: { step: "webhook_register", status: webhookRes.status, data: webhookData, url: webhookUrl }
       });
     }
 
