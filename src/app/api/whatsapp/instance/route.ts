@@ -71,7 +71,8 @@ export async function POST() {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "apikey": EVOLUTION_KEY || "" 
+        "apikey": EVOLUTION_KEY || "",
+        "apiKey": EVOLUTION_KEY || "" 
       },
       body: JSON.stringify({
         instanceName,
@@ -100,7 +101,10 @@ export async function POST() {
     } else {
       console.log(`[Evolution] Create returned ${createRes.status}, attempting /connect fallback...`);
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
-          headers: { "apikey": EVOLUTION_KEY || "" },
+          headers: { 
+            "apikey": EVOLUTION_KEY || "",
+            "apiKey": EVOLUTION_KEY || "" 
+          },
       });
       connectData = await connectRes.json();
       
@@ -127,7 +131,8 @@ export async function POST() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": EVOLUTION_KEY || ""
+          "apikey": EVOLUTION_KEY || "",
+          "apiKey": EVOLUTION_KEY || ""
         },
         body: JSON.stringify({
           url: webhookUrl,

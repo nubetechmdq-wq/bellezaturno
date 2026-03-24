@@ -174,7 +174,8 @@ INSTRUCCIONES FINALES:
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": EVOLUTION_API_KEY
+          "apikey": EVOLUTION_API_KEY,
+          "apiKey": EVOLUTION_API_KEY
         },
         body: JSON.stringify({
           number: remoteJid,
