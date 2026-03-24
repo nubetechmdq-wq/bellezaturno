@@ -71,7 +71,8 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
       console.log("Respuesta de connect:", data);
       
       if (!res.ok) {
-        alert(`Error del servidor: ${data.details || data.error || "Desconocido"}`);
+        const errorMsg = typeof data.details === 'object' ? JSON.stringify(data.details) : (data.details || data.error || "Desconocido");
+        alert(`Error del servidor: ${errorMsg}`);
         return;
       }
       
@@ -79,7 +80,7 @@ export function WhatsAppClient({ tenant, initialConfig }: Props) {
         setQrCode(data.base64);
         setStatus("connecting");
       } else {
-        alert("No se recibió QR en la respuesta: " + JSON.stringify(data));
+        alert("No se recibió QR en la respuesta: " + (typeof data === 'object' ? JSON.stringify(data) : data));
       }
     } catch (e: any) {
       alert(`Error de red al conectar: ${e.message}`);
