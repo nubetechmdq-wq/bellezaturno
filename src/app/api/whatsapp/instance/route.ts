@@ -29,8 +29,15 @@ export async function GET() {
       headers: { "apikey": WHATSAPP_SERVER_KEY || "" },
     });
 
-    if (!response.ok) {
-        return NextResponse.json({ status: "disconnected" });
+    const contentType = response.headers.get("content-type");
+    if (!response.ok || !contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("[WhatsApp Status Error]", response.status, text.substring(0, 100));
+        return NextResponse.json({ 
+          status: "disconnected", 
+          error: "El servidor de WhatsApp no respondió con JSON válido. ¿Es correcta la URL?",
+          debug: { status: response.status, bodyPreview: text.substring(0, 50) }
+        });
     }
 
     const data = await response.json();
@@ -82,13 +89,19 @@ export async function POST() {
       })
     });
 
-    const createData = await createRes.json();
-    
-    if (!createRes.ok) {
-       return NextResponse.json({ error: `Error en WhatsApp Server`, detail: createData }, { status: createRes.status });
+    const contentType = createRes.headers.get("content-type");
+    if (!createRes.ok || !contentType || !contentType.includes("application/json")) {
+       const text = await createRes.text();
+       console.error("[WhatsApp Create Error]", createRes.status, text.substring(0, 100));
+       return NextResponse.json({ 
+         error: `Error en WhatsApp Server (Status: ${createRes.status})`, 
+         detail: text.substring(0, 100) 
+       }, { status: createRes.status });
     }
 
-    // El servidor devuelve { status, base64 } (donde base64 es el QR) o { status: "open" }
+    const createData = await createRes.json();
+    
+    // El servidor devuelve { status, base64 } o { status: "open" }
     const connectData = createData.status === "open" ? { status: "open" } : { base64: createData.base64 };
 
     // Log para analytics
@@ -130,10 +143,14 @@ export async function DELETE() {
 
   try {
     // Borrar instancia con una sola llamada
-    await fetch(`${WHATSAPP_SERVER_URL}/instance/delete/${instanceName}`, {
+    const delRes = await fetch(`${WHATSAPP_SERVER_URL}/instance/delete/${instanceName}`, {
       method: "DELETE",
       headers: { "apikey": WHATSAPP_SERVER_KEY || "" },
     });
+
+    if (!delRes.ok) {
+        console.warn("[WhatsApp Delete Error]", delRes.status);
+    }
 
     await supabase
       .from("whatsapp_config")

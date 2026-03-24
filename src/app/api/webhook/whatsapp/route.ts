@@ -167,18 +167,25 @@ INSTRUCCIONES FINALES:
 
     // 5. Enviar mensaje de vuelta vía el nuevo servidor Baileys
     if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-      await fetch(`${EVOLUTION_API_URL}/send/text`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": EVOLUTION_API_KEY
-        },
-        body: JSON.stringify({
-          instanceName: instanceName,
-          number: remoteJid,
-          text: replyText
-        })
-      });
+      try {
+        const sendRes = await fetch(`${EVOLUTION_API_URL}/send/text`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": EVOLUTION_API_KEY
+          },
+          body: JSON.stringify({
+            instanceName: instanceName,
+            number: remoteJid,
+            text: replyText
+          })
+        });
+        if (!sendRes.ok) {
+          console.error("[WhatsApp Send Error]", sendRes.status, await sendRes.text());
+        }
+      } catch (err: any) {
+        console.error("[WhatsApp Send Fatal]", err.message);
+      }
     }
 
     return NextResponse.json({ ok: true });
