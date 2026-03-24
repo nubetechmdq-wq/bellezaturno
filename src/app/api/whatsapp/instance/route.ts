@@ -124,10 +124,25 @@ export async function POST() {
         body: JSON.stringify({
           url: webhookUrl,
           enabled: true,
-          events: ["MESSAGES_UPSERT"]
+          webhook_by_events: false,
+          events: ["MESSAGES_UPSERT", "messages.upsert"]
         })
       });
-      console.log(`[Webhook Response]`, webhookRes.status, await webhookRes.text());
+
+      const webhookData = await webhookRes.json();
+      console.log(`[Webhook Response]`, webhookRes.status, webhookData);
+
+      // LOG DE DIAGNÓSTICO EN DB - Muy importante para depuración remota
+      await supabase.from("analytics_events").insert({
+        tenant_id: tenant.id,
+        event_type: "webhook_registration_attempt",
+        properties: {
+          status: webhookRes.status,
+          response: webhookData,
+          url_used: webhookUrl,
+          instance: instanceName
+        }
+      });
     }
 
     await supabase
