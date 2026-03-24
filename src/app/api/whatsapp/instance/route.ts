@@ -72,7 +72,8 @@ export async function POST() {
       headers: { 
         "Content-Type": "application/json",
         "apikey": EVOLUTION_KEY || "",
-        "apiKey": EVOLUTION_KEY || "" 
+        "apiKey": EVOLUTION_KEY || "",
+        "Authorization": `Bearer ${EVOLUTION_KEY}`
       },
       body: JSON.stringify({
         instanceName,
@@ -117,7 +118,8 @@ export async function POST() {
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
           headers: { 
             "apikey": EVOLUTION_KEY || "",
-            "apiKey": EVOLUTION_KEY || "" 
+            "apiKey": EVOLUTION_KEY || "",
+            "Authorization": `Bearer ${EVOLUTION_KEY}`
           },
       });
       const connectRaw = await connectRes.text();
@@ -152,7 +154,8 @@ export async function POST() {
         headers: {
           "Content-Type": "application/json",
           "apikey": EVOLUTION_KEY || "",
-          "apiKey": EVOLUTION_KEY || ""
+          "apiKey": EVOLUTION_KEY || "",
+          "Authorization": `Bearer ${EVOLUTION_KEY}`
         },
         body: JSON.stringify({
           url: webhookUrl,
