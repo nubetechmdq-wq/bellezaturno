@@ -103,11 +103,11 @@ export async function POST() {
 
     if (createRes.status === 201 || createRes.status === 200) {
       connectData = createData?.qrcode || createData?.instance?.qrcode;
-    } else if (createRes.status === 403 || createRes.status === 401) {
-       return NextResponse.json({ error: "Error de API Key (403) en Evolution API", detail: createData }, { status: 403 });
-    } else if (createRes.status === 409) {
-      // Ya existe, procedemos al connect fallback
-      console.log(`[Evolution] Create returned 409, attempting /connect fallback...`);
+    } else if (createRes.status === 403 || createRes.status === 409) {
+      // 403 en Evolution v2 suele ser "Instance name already in use"
+      console.log(`[Evolution] Create returned ${createRes.status} (likely already exists), attempting /connect fallback...`);
+    } else if (createRes.status === 401) {
+       return NextResponse.json({ error: "Error de API Key (401) en Evolution API", detail: createData }, { status: 401 });
     } else {
        return NextResponse.json({ error: `Error ${createRes.status} en Evolution API`, detail: createData }, { status: 500 });
     }
@@ -146,7 +146,8 @@ export async function POST() {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (appUrl) {
       const webhookUrl = `${appUrl}/api/webhook/whatsapp`;
-      const webhookRes = await fetch(`${EVOLUTION_URL}/webhook/instance/${instanceName}`, {
+      // Probamos con /webhook/set que es el más estándar en v2
+      const webhookRes = await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
