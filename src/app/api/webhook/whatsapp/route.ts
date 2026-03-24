@@ -45,21 +45,28 @@ export async function POST(req: NextRequest) {
     if (!textMsg.trim()) return NextResponse.json({ ok: true });
 
     // 1. Identificar el Tenant vía instanceName
+    // Buscamos primero el tenant_id sin importar si está activo o no para poder loguear el hit
+    const { data: configCheck } = await admin
+      .from("whatsapp_config")
+      .select("tenant_id, is_active")
+      .eq("evolution_instance_name", instanceName)
+      .single();
+
+    if (configCheck) {
+      await admin.from("analytics_events").insert({
+        tenant_id: configCheck.tenant_id,
+        event_type: "webhook_hit",
+        properties: { instance: instanceName, remoteJid, bot_active: configCheck.is_active }
+      });
+    }
+
+    // 2. Ahora sí, buscar la config completa solo si está activa
     const { data: config } = await admin
       .from("whatsapp_config")
       .select("*, tenants(*, services(name, description, duration_minutes, price))")
       .eq("evolution_instance_name", instanceName)
       .eq("is_active", true)
       .single();
-
-    if (config) {
-      // Log de recepción exitosa
-      await admin.from("analytics_events").insert({
-        tenant_id: config.tenant_id,
-        event_type: "webhook_hit",
-        properties: { instance: instanceName, remoteJid }
-      });
-    }
 
     if (!config || !config.tenants) {
       console.log(`No se encontró config activa para la instancia: ${instanceName}`);
