@@ -82,7 +82,14 @@ export async function POST() {
       })
     });
 
-    const createData = await createRes.json();
+    let createData: any = {};
+    const createRaw = await createRes.text();
+    try {
+      createData = JSON.parse(createRaw);
+    } catch (e) {
+      createData = { raw: createRaw };
+    }
+    
     console.log("[Evolution Create Response]", createRes.status, createData);
 
     // LOG INICIAL: Resultado de la creación
@@ -92,21 +99,33 @@ export async function POST() {
       properties: { step: "create", status: createRes.status, data: createData }
     });
 
-    let connectData = null;
+    let connectData: any = null;
 
-    if (createRes.status === 201) {
+    if (createRes.status === 201 || createRes.status === 200) {
       connectData = createData?.qrcode || createData?.instance?.qrcode;
     } else if (createRes.status === 403 || createRes.status === 401) {
-       return NextResponse.json({ error: "Error de API Key en Evolution API" }, { status: 403 });
+       return NextResponse.json({ error: "Error de API Key (403) en Evolution API", detail: createData }, { status: 403 });
+    } else if (createRes.status === 409) {
+      // Ya existe, procedemos al connect fallback
+      console.log(`[Evolution] Create returned 409, attempting /connect fallback...`);
     } else {
-      console.log(`[Evolution] Create returned ${createRes.status}, attempting /connect fallback...`);
+       return NextResponse.json({ error: `Error ${createRes.status} en Evolution API`, detail: createData }, { status: 500 });
+    }
+
+    // SI NO TENEMOS QR (ya sea por 409 o porque la creación no lo trajo), intentamos /connect
+    if (!connectData?.base64) {
       const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
           headers: { 
             "apikey": EVOLUTION_KEY || "",
             "apiKey": EVOLUTION_KEY || "" 
           },
       });
-      connectData = await connectRes.json();
+      const connectRaw = await connectRes.text();
+      try {
+        connectData = JSON.parse(connectRaw);
+      } catch (e) {
+        connectData = { raw: connectRaw };
+      }
       
       // LOG: Resultado del connect fallback
       await supabase.from("analytics_events").insert({
@@ -118,7 +137,7 @@ export async function POST() {
 
     if (!connectData?.base64 && !connectData?.qrcode?.base64) {
       return NextResponse.json({ 
-        error: "No se pudo obtener el QR de Evolution API", 
+        error: "No se pudo obtener el código QR", 
         details: connectData 
       }, { status: 400 });
     }
