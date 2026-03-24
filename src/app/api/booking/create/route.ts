@@ -84,13 +84,14 @@ export async function POST(req: NextRequest) {
         .replace("{date}", new Date(starts_at).toLocaleDateString("es-AR"))
         .replace("{time}", new Date(starts_at).toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' }));
 
-      await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${config.evolution_instance_name}`, {
+      await fetch(`${process.env.EVOLUTION_API_URL}/send/text`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "apikey": process.env.EVOLUTION_API_KEY
         },
         body: JSON.stringify({
+          instanceName: config.evolution_instance_name,
           number: client_phone,
           text: msg
         })

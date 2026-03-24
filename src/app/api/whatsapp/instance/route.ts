@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
 
-const EVOLUTION_URL = process.env.EVOLUTION_API_URL;
-const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY;
+const WHATSAPP_SERVER_URL = process.env.EVOLUTION_API_URL;
+const WHATSAPP_SERVER_KEY = process.env.EVOLUTION_API_KEY;
 
 /**
- * API para gestionar instancias de WhatsApp por Salón
+ * API para gestionar instancias de WhatsApp por Salón (Baileys Server)
  */
 export async function GET() {
   const { userId } = await auth();
@@ -24,9 +24,9 @@ export async function GET() {
   const instanceName = `bt-${tenant.slug}`;
 
   try {
-    // Consultar estado en Evolution API
-    const response = await fetch(`${EVOLUTION_URL}/instance/connectionState/${instanceName}`, {
-      headers: { "apikey": EVOLUTION_KEY || "" },
+    // Consultar estado en el nuevo servidor Baileys
+    const response = await fetch(`${WHATSAPP_SERVER_URL}/instance/status/${instanceName}`, {
+      headers: { "apikey": WHATSAPP_SERVER_KEY || "" },
     });
 
     if (!response.ok) {
@@ -34,6 +34,7 @@ export async function GET() {
     }
 
     const data = await response.json();
+    const state = data.instance?.state || "disconnected";
     
     // Actualizar estado en DB de forma automática
     await supabase
@@ -41,10 +42,10 @@ export async function GET() {
       .upsert({ 
         tenant_id: tenant.id,
         evolution_instance_name: instanceName,
-        instance_status: data.instance?.state || "disconnected"
+        instance_status: state
       }, { onConflict: "tenant_id" });
 
-    return NextResponse.json(data);
+    return NextResponse.json({ instance: { state } });
   } catch (error) {
     return NextResponse.json({ status: "error", message: "Failed to connect to WhatsApp service" });
   }
@@ -64,126 +65,50 @@ export async function POST() {
   if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
 
   const instanceName = `bt-${tenant.slug}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://bellezaturno.com";
+  const webhookUrl = `${appUrl}/api/webhook/whatsapp`;
 
   try {
-    // 1. Intentar crear instancia
-    const createRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
+    // 1. Crear instancia (el nuevo servidor devuelve el QR en el 201)
+    const createRes = await fetch(`${WHATSAPP_SERVER_URL}/instance/create`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "apikey": EVOLUTION_KEY || "",
-        "apiKey": EVOLUTION_KEY || "",
-        "Authorization": `Bearer ${EVOLUTION_KEY}`
+        "apikey": WHATSAPP_SERVER_KEY || ""
       },
       body: JSON.stringify({
         instanceName,
-        qrcode: true,
-        integration: "WHATSAPP-BAILEYS"
+        webhookUrl
       })
     });
 
-    let createData: any = {};
-    const createRaw = await createRes.text();
-    try {
-      createData = JSON.parse(createRaw);
-    } catch (e) {
-      createData = { raw: createRaw };
-    }
+    const createData = await createRes.json();
     
-    console.log("[Evolution Create Response]", createRes.status, createData);
+    if (!createRes.ok) {
+       return NextResponse.json({ error: `Error en WhatsApp Server`, detail: createData }, { status: createRes.status });
+    }
 
-    // LOG INICIAL: Resultado de la creación
+    // El servidor devuelve { status, base64 } (donde base64 es el QR) o { status: "open" }
+    const connectData = createData.status === "open" ? { status: "open" } : { base64: createData.base64 };
+
+    // Log para analytics
     await supabase.from("analytics_events").insert({
       tenant_id: tenant.id,
       event_type: "whatsapp_creation_log",
-      properties: { step: "create", status: createRes.status, data: createData }
+      properties: { step: "create", status: createRes.status, success: !!createData.base64 || createData.status === "open" }
     });
-
-    let connectData: any = null;
-
-    if (createRes.status === 201 || createRes.status === 200) {
-      connectData = createData?.qrcode || createData?.instance?.qrcode;
-    } else if (createRes.status === 403 || createRes.status === 409 || createRes.status === 401) {
-      // Evolution v2 retorna 401 o 403 cuando la instancia ya existe (token conflict)
-      // Intentamos el fallback /connect para obtener el QR de la instancia existente
-      console.log(`[Evolution] Create returned ${createRes.status} (instance likely exists), attempting /connect fallback...`);
-    } else {
-       return NextResponse.json({ error: `Error ${createRes.status} en Evolution API`, detail: createData }, { status: 500 });
-    }
-
-    // SI NO TENEMOS QR (ya sea por 409 o porque la creación no lo trajo), intentamos /connect
-    if (!connectData?.base64) {
-      const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
-          headers: { 
-            "apikey": EVOLUTION_KEY || "",
-            "apiKey": EVOLUTION_KEY || "",
-            "Authorization": `Bearer ${EVOLUTION_KEY}`
-          },
-      });
-      const connectRaw = await connectRes.text();
-      try {
-        connectData = JSON.parse(connectRaw);
-      } catch (e) {
-        connectData = { raw: connectRaw };
-      }
-      
-      // LOG: Resultado del connect fallback
-      await supabase.from("analytics_events").insert({
-        tenant_id: tenant.id,
-        event_type: "whatsapp_creation_log",
-        properties: { step: "connect_fallback", status: connectRes.status, data: connectData }
-      });
-    }
-
-    if (!connectData?.base64 && !connectData?.qrcode?.base64) {
-      return NextResponse.json({ 
-        error: "No se pudo obtener el código QR", 
-        details: connectData 
-      }, { status: 400 });
-    }
-
-    // 4. Configurar el Webhook para recibir mensajes (Refuerzo v2)
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (appUrl) {
-      const webhookUrl = `${appUrl}/api/webhook/whatsapp`;
-      // Probamos con /webhook/set que es el más estándar en v2
-      const webhookRes = await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": EVOLUTION_KEY || "",
-          "apiKey": EVOLUTION_KEY || "",
-          "Authorization": `Bearer ${EVOLUTION_KEY}`
-        },
-        body: JSON.stringify({
-          url: webhookUrl,
-          enabled: true,
-          webhook_by_events: false,
-          events: ["MESSAGES_UPSERT", "messages.upsert"]
-        })
-      });
-
-      const webhookData = await webhookRes.json();
-
-      // LOG: Resultado del registro del webhook
-      await supabase.from("analytics_events").insert({
-        tenant_id: tenant.id,
-        event_type: "whatsapp_creation_log",
-        properties: { step: "webhook_register", status: webhookRes.status, data: webhookData, url: webhookUrl }
-      });
-    }
 
     await supabase
       .from("whatsapp_config")
       .upsert({ 
         tenant_id: tenant.id,
         evolution_instance_name: instanceName,
-        instance_status: "connecting"
+        instance_status: createData.status || "connecting"
       }, { onConflict: "tenant_id" });
 
     return NextResponse.json(connectData);
   } catch (error: any) {
-    console.error("[Evolution Fatal Error]", error);
+    console.error("[WhatsApp Server Error]", error);
     return NextResponse.json({ error: "Failed to create instance", details: error.message }, { status: 500 });
   }
 }
@@ -204,15 +129,10 @@ export async function DELETE() {
   const instanceName = `bt-${tenant.slug}`;
 
   try {
-    // Cerrar sesión y borrar instancia
-    await fetch(`${EVOLUTION_URL}/instance/logout/${instanceName}`, {
+    // Borrar instancia con una sola llamada
+    await fetch(`${WHATSAPP_SERVER_URL}/instance/delete/${instanceName}`, {
       method: "DELETE",
-      headers: { "apikey": EVOLUTION_KEY || "" },
-    });
-
-    await fetch(`${EVOLUTION_URL}/instance/delete/${instanceName}`, {
-        method: "DELETE",
-        headers: { "apikey": EVOLUTION_KEY || "" },
+      headers: { "apikey": WHATSAPP_SERVER_KEY || "" },
     });
 
     await supabase
@@ -224,6 +144,6 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to logout" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete instance" }, { status: 500 });
   }
 }

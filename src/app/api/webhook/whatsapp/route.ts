@@ -12,16 +12,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("[Webhook Received]", JSON.stringify(body, null, 2));
 
-    const event = body.event || body.type || body.event_type;
-    const instanceName = body.instance || body.instanceName || body.instance_name;
-    if (event !== "MESSAGES_UPSERT" && event !== "messages.upsert") {
-      return NextResponse.json({ ok: true, ignored: true, event });
+    const instanceName = body.instance;
+    const data = body.data;
+    
+    if (!instanceName || !data) {
+      return NextResponse.json({ ok: true, ignored: true, reason: "Missing instance or data" });
     }
 
-    // Extraemos los datos principales de forma flexible (v1 vs v2)
-    const data = body.data || body;
-    const messageData = data.message || data.messages?.[0]?.message || data.messages?.[0];
-    const key = data.key || data.messages?.[0]?.key;
+    const key = data.key;
+    const messageData = data.message;
     const remoteJid = key?.remoteJid;
     const fromMe = key?.fromMe;
 
@@ -29,23 +28,21 @@ export async function POST(req: NextRequest) {
     if (!remoteJid || !messageData) return NextResponse.json({ ok: true, message: "Missing data", hasJid: !!remoteJid, hasMsg: !!messageData });
     if (remoteJid.includes("@g.us")) return NextResponse.json({ ok: true, message: "Ignored: Group chat" });
 
-    const clientName = data.pushName || data.messages?.[0]?.pushName || "Cliente";
+    const clientName = body.pushName || data.pushName || "Cliente";
 
     console.log(`[Webhook] Processing message from ${remoteJid} (${clientName}) for instance ${instanceName}`);
 
-    // Extraer texto (puede venir en diferentes propiedades según Evolution Mappings)
+    // Extraer texto del mensaje de forma robusta para Baileys
     const textMsg =
       messageData.conversation ||
       messageData.extendedTextMessage?.text ||
-      messageData.text ||
-      messageData.caption ||
-      messageData.message?.conversation ||
+      messageData.imageMessage?.caption ||
+      messageData.videoMessage?.caption ||
       "";
 
     if (!textMsg.trim()) return NextResponse.json({ ok: true });
 
     // 1. Identificar el Tenant vía instanceName
-    // Buscamos primero el tenant_id sin importar si está activo o no para poder loguear el hit
     const { data: configCheck } = await admin
       .from("whatsapp_config")
       .select("tenant_id, is_active")
@@ -77,7 +74,7 @@ export async function POST(req: NextRequest) {
     const landingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/s/${tenant.slug}`;
 
     // 2. Obtener o crear conversación (contexto)
-    const { data: conv, error: convError } = await admin
+    const { data: conv } = await admin
       .from("whatsapp_conversations")
       .select("*")
       .eq("tenant_id", config.tenant_id)
@@ -130,7 +127,7 @@ INSTRUCCIONES FINALES:
     let replyText = "";
     try {
       if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "tu_gemini_api_key") {
-        throw new Error("GEMINI_API_KEY no configurada correctamente en Vercel.");
+        throw new Error("GEMINI_API_KEY no configurada correctamente.");
       }
 
       const history = conversationContext.slice(-4).map((h: any) => ({
@@ -165,25 +162,23 @@ INSTRUCCIONES FINALES:
 
     } catch (aiError: any) {
       console.error("[Gemini Error]", aiError);
-      replyText = `Lo siento, estoy teniendo un inconveniente técnico (Error IA). Por favor, reservá directamente acá: ${landingUrl}`;
+      replyText = `Lo siento, estoy teniendo un inconveniente técnico. Por favor, reservá directamente acá: ${landingUrl}`;
     }
 
-    // 5. Enviar mensaje de vuelta vía Evolution API
+    // 5. Enviar mensaje de vuelta vía el nuevo servidor Baileys
     if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-      const sendRes = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+      await fetch(`${EVOLUTION_API_URL}/send/text`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "apikey": EVOLUTION_API_KEY,
-          "apiKey": EVOLUTION_API_KEY,
-          "Authorization": `Bearer ${EVOLUTION_API_KEY}`
+          "apikey": EVOLUTION_API_KEY
         },
         body: JSON.stringify({
+          instanceName: instanceName,
           number: remoteJid,
           text: replyText
         })
       });
-      console.log("[Evolution Send]", sendRes.status, await sendRes.text());
     }
 
     return NextResponse.json({ ok: true });

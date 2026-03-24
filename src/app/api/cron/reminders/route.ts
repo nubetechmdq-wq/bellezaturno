@@ -87,10 +87,14 @@ export async function GET(req: NextRequest) {
     pendingMessages.map(async (msg) => {
       if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
       
-      const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${msg.instance}`, {
+      const res = await fetch(`${EVOLUTION_API_URL}/send/text`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": EVOLUTION_API_KEY },
-        body: JSON.stringify({ number: msg.phone, text: msg.text })
+        body: JSON.stringify({ 
+          instanceName: msg.instance,
+          number: msg.phone, 
+          text: msg.text 
+        })
       });
       
       if (res.ok) {

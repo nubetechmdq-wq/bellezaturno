@@ -1,47 +1,36 @@
 import { NextResponse } from "next/server";
 
-const EVOLUTION_URL = process.env.EVOLUTION_API_URL;
-const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY;
+const WHATSAPP_URL = process.env.EVOLUTION_API_URL;
+const WHATSAPP_KEY = process.env.EVOLUTION_API_KEY;
 
 export async function GET() {
   const results: any = {
     env: {
-      url: EVOLUTION_URL || "NOT SET",
-      keyLength: EVOLUTION_KEY?.length || 0,
-      keyPreview: EVOLUTION_KEY ? EVOLUTION_KEY.substring(0, 8) + "..." : "NOT SET",
+      url: WHATSAPP_URL || "NOT SET",
+      keyLength: WHATSAPP_KEY?.length || 0,
+      keyPreview: WHATSAPP_KEY ? WHATSAPP_KEY.substring(0, 8) + "..." : "NOT SET",
     },
     tests: {}
   };
 
-  // Test 1: fetchInstances
+  // Test 1: Verificar el servidor (health)
   try {
-    const r = await fetch(`${EVOLUTION_URL}/instance/fetchInstances`, {
-      headers: { "apikey": EVOLUTION_KEY || "" },
-    });
-    const body = await r.text();
-    results.tests.fetchInstances = { status: r.status, body: body.substring(0, 500) };
+    const r = await fetch(`${WHATSAPP_URL}/health`);
+    const body = await r.json();
+    results.tests.health = { status: r.status, data: body };
   } catch (e: any) {
-    results.tests.fetchInstances = { error: e.message };
+    results.tests.health = { error: e.message };
   }
 
-  // Test 2: create con la instancia real
+  // Test 2: Intentar consultar una instancia de prueba
   try {
-    const r = await fetch(`${EVOLUTION_URL}/instance/create`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": EVOLUTION_KEY || "",
-      },
-      body: JSON.stringify({
-        instanceName: "bt-debug-test",
-        qrcode: false,
-        integration: "WHATSAPP-BAILEYS"
-      })
+    const r = await fetch(`${WHATSAPP_URL}/instance/status/debug-test`, {
+      headers: { "apikey": WHATSAPP_KEY || "" },
     });
     const body = await r.text();
-    results.tests.createInstance = { status: r.status, body: body.substring(0, 500) };
+    results.tests.instanceStatus = { status: r.status, body: body.substring(0, 500) };
   } catch (e: any) {
-    results.tests.createInstance = { error: e.message };
+    results.tests.instanceStatus = { error: e.message };
   }
 
   return NextResponse.json(results);
