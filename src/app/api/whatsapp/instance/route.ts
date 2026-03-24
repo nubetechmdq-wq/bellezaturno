@@ -77,7 +77,6 @@ export async function POST() {
       },
       body: JSON.stringify({
         instanceName,
-        token: tenant.slug, 
         qrcode: true,
         integration: "WHATSAPP-BAILEYS"
       })
@@ -104,11 +103,10 @@ export async function POST() {
 
     if (createRes.status === 201 || createRes.status === 200) {
       connectData = createData?.qrcode || createData?.instance?.qrcode;
-    } else if (createRes.status === 403 || createRes.status === 409) {
-      // 403 en Evolution v2 suele ser "Instance name already in use"
-      console.log(`[Evolution] Create returned ${createRes.status} (likely already exists), attempting /connect fallback...`);
-    } else if (createRes.status === 401) {
-       return NextResponse.json({ error: "Error de API Key (401) en Evolution API", detail: createData }, { status: 401 });
+    } else if (createRes.status === 403 || createRes.status === 409 || createRes.status === 401) {
+      // Evolution v2 retorna 401 o 403 cuando la instancia ya existe (token conflict)
+      // Intentamos el fallback /connect para obtener el QR de la instancia existente
+      console.log(`[Evolution] Create returned ${createRes.status} (instance likely exists), attempting /connect fallback...`);
     } else {
        return NextResponse.json({ error: `Error ${createRes.status} en Evolution API`, detail: createData }, { status: 500 });
     }
